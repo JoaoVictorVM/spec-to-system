@@ -11,8 +11,10 @@ build/
 # Env
 **/.env
 **/.env.local
+**/.env.test
 **/.env.*.local
 !**/.env.example
+!**/.env.test.example
 
 # Logs
 *.log
