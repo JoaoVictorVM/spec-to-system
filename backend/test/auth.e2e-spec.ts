@@ -1,6 +1,12 @@
 import request from 'supertest';
 import { TestApp } from './test-app';
 
+interface LoginResponseBody {
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; email: string; passwordHash?: string; password?: string };
+}
+
 describe('Auth (e2e)', () => {
   let testApp: TestApp;
 
@@ -93,6 +99,108 @@ describe('Auth (e2e)', () => {
         .post('/auth/register')
         .send({ ...validPayload, isAdmin: true })
         .expect(400);
+    });
+  });
+
+  describe('POST /auth/login', () => {
+    const credentials = {
+      email: 'logintest@example.com',
+      password: 'secret123',
+    };
+
+    async function registerUser(): Promise<void> {
+      await request(testApp.getHttpServer())
+        .post('/auth/register')
+        .send(credentials)
+        .expect(201);
+    }
+
+    it('returns 200 with access token, refresh token and public user on valid credentials', async () => {
+      await registerUser();
+
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send(credentials)
+        .expect(200);
+
+      const body = response.body as LoginResponseBody;
+      expect(body).toMatchObject({
+        accessToken: expect.any(String) as string,
+        refreshToken: expect.any(String) as string,
+        user: {
+          id: expect.any(String) as string,
+          email: credentials.email,
+        },
+      });
+      expect(body.user).not.toHaveProperty('passwordHash');
+      expect(body.user).not.toHaveProperty('password');
+    });
+
+    it('persists the refresh token hashed (never plain) in the database', async () => {
+      await registerUser();
+
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send(credentials)
+        .expect(200);
+
+      const body = response.body as LoginResponseBody;
+      const persisted = await testApp.prisma.refreshToken.findMany({});
+      expect(persisted).toHaveLength(1);
+      const stored = persisted[0];
+      expect(stored).toBeDefined();
+      expect(stored?.tokenHash).not.toBe(body.refreshToken);
+      expect(stored?.expiresAt.getTime()).toBeGreaterThan(Date.now());
+      expect(stored?.revokedAt).toBeNull();
+    });
+
+    it('returns 401 for an unknown email', async () => {
+      await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'never-registered@example.com', password: 'secret123' })
+        .expect(401);
+    });
+
+    it('returns 401 for a wrong password', async () => {
+      await registerUser();
+
+      await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send({ email: credentials.email, password: 'wrong-pass-1' })
+        .expect(401);
+    });
+
+    it('does not leak whether the email exists (same status for both failure modes)', async () => {
+      await registerUser();
+
+      const wrongPwd = await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send({ email: credentials.email, password: 'wrong-pass-1' });
+      const unknownEmail = await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'unknown@example.com', password: 'wrong-pass-1' });
+
+      expect(wrongPwd.status).toBe(401);
+      expect(unknownEmail.status).toBe(401);
+    });
+
+    it('returns 400 when the email is malformed', async () => {
+      await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'not-an-email', password: 'whatever' })
+        .expect(400);
+    });
+
+    it('logs in case-insensitively on email', async () => {
+      await registerUser();
+
+      await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: credentials.email.toUpperCase(),
+          password: credentials.password,
+        })
+        .expect(200);
     });
   });
 });
