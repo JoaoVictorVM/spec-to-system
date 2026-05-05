@@ -316,4 +316,76 @@ describe('Auth (e2e)', () => {
       expect(refresh).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/i);
     });
   });
+
+  describe('POST /auth/logout', () => {
+    const credentials = {
+      email: 'logoutuser@example.com',
+      password: 'secret123',
+    };
+
+    async function loginAndGetCookies(): Promise<string[]> {
+      await request(testApp.getHttpServer())
+        .post('/auth/register')
+        .send(credentials)
+        .expect(201);
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send(credentials)
+        .expect(200);
+      return getSetCookieHeaders(response.headers);
+    }
+
+    it('returns 204 and clears the auth cookies on a valid session', async () => {
+      const cookies = await loginAndGetCookies();
+
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/logout')
+        .set('Cookie', cookies)
+        .expect(204);
+
+      const setCookies = getSetCookieHeaders(response.headers);
+      const access = findCookie(setCookies, ACCESS_COOKIE);
+      const refresh = findCookie(setCookies, REFRESH_COOKIE);
+      expect(access).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/i);
+      expect(refresh).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/i);
+    });
+
+    it('marks the refresh token as revoked in the database', async () => {
+      const cookies = await loginAndGetCookies();
+
+      await request(testApp.getHttpServer())
+        .post('/auth/logout')
+        .set('Cookie', cookies)
+        .expect(204);
+
+      const tokens = await testApp.prisma.refreshToken.findMany({});
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0]?.revokedAt).not.toBeNull();
+    });
+
+    it('prevents reuse of the revoked refresh token at /auth/refresh', async () => {
+      const cookies = await loginAndGetCookies();
+
+      await request(testApp.getHttpServer())
+        .post('/auth/logout')
+        .set('Cookie', cookies)
+        .expect(204);
+
+      await request(testApp.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookies)
+        .expect(401);
+    });
+
+    it('is idempotent — returns 204 even when no cookie is sent', async () => {
+      await request(testApp.getHttpServer()).post('/auth/logout').expect(204);
+    });
+
+    it('is idempotent — returns 204 with an unknown refresh cookie', async () => {
+      await request(testApp.getHttpServer())
+        .post('/auth/logout')
+        .set('Cookie', `${REFRESH_COOKIE}=unknown-value`)
+        .expect(204);
+    });
+  });
 });

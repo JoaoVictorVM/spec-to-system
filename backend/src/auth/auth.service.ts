@@ -57,6 +57,15 @@ export class AuthService {
     };
   }
 
+  /**
+   * Revokes the refresh token if it exists. Idempotent — never throws on
+   * invalid/missing tokens, so logout always succeeds from the client's view.
+   */
+  async logout(plainRefreshToken: string | null): Promise<void> {
+    if (!plainRefreshToken) return;
+    await this.tokens.revokeRefreshToken(plainRefreshToken);
+  }
+
   async refresh(plainRefreshToken: string): Promise<AuthResult> {
     const rotated = await this.tokens.rotateRefreshToken(plainRefreshToken);
     const user = await this.users.findById(rotated.userId);

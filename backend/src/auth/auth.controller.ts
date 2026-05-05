@@ -44,6 +44,17 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const plain = this.cookies.readRefreshToken(req);
+    await this.auth.logout(plain);
+    this.cookies.clearAuthCookies(res);
+  }
+
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(

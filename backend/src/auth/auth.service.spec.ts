@@ -15,7 +15,10 @@ describe('AuthService', () => {
   let tokens: jest.Mocked<
     Pick<
       TokensService,
-      'signAccessToken' | 'issueRefreshToken' | 'rotateRefreshToken'
+      | 'signAccessToken'
+      | 'issueRefreshToken'
+      | 'rotateRefreshToken'
+      | 'revokeRefreshToken'
     >
   >;
 
@@ -41,6 +44,7 @@ describe('AuthService', () => {
       signAccessToken: jest.fn(),
       issueRefreshToken: jest.fn(),
       rotateRefreshToken: jest.fn(),
+      revokeRefreshToken: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -205,6 +209,22 @@ describe('AuthService', () => {
       await expect(service.refresh('bad-refresh')).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
+    });
+  });
+
+  describe('logout', () => {
+    it('revokes the refresh token when one is provided', async () => {
+      tokens.revokeRefreshToken.mockResolvedValue();
+
+      await service.logout('refresh-plain');
+
+      expect(tokens.revokeRefreshToken).toHaveBeenCalledWith('refresh-plain');
+    });
+
+    it('is a no-op when no refresh token is provided', async () => {
+      await service.logout(null);
+
+      expect(tokens.revokeRefreshToken).not.toHaveBeenCalled();
     });
   });
 });

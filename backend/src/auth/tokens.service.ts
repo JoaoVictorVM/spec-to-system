@@ -110,6 +110,18 @@ export class TokensService {
     };
   }
 
+  /**
+   * Marks a refresh token as revoked. Idempotent: silently no-ops if the token
+   * is unknown or already revoked, so logout is always safe to retry.
+   */
+  async revokeRefreshToken(plain: string): Promise<void> {
+    const tokenHash = this.hashRefreshToken(plain);
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   hashRefreshToken(plain: string): string {
     return createHash('sha256').update(plain).digest('hex');
   }

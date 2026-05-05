@@ -16,6 +16,7 @@ describe('TokensService', () => {
     create: jest.Mock<Promise<unknown>, [RefreshCreateArgs]>;
     findUnique: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
   let prismaMock: PrismaService;
 
@@ -35,6 +36,7 @@ describe('TokensService', () => {
       create: jest.fn<Promise<unknown>, [RefreshCreateArgs]>(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     };
     prismaMock = {
       refreshToken: refreshDelegate,
@@ -197,6 +199,30 @@ describe('TokensService', () => {
       const txMock = (prismaMock as unknown as { $transaction: jest.Mock })
         .$transaction;
       expect(txMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('revokeRefreshToken', () => {
+    it('marks the matching token as revoked', async () => {
+      refreshDelegate.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.revokeRefreshToken('plain-value');
+
+      expect(refreshDelegate.updateMany).toHaveBeenCalledWith({
+        where: {
+          tokenHash: service.hashRefreshToken('plain-value'),
+          revokedAt: null,
+        },
+        data: { revokedAt: expect.any(Date) as Date },
+      });
+    });
+
+    it('is idempotent — does not throw when no token matches', async () => {
+      refreshDelegate.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.revokeRefreshToken('unknown'),
+      ).resolves.toBeUndefined();
     });
   });
 });
