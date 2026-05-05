@@ -11,6 +11,7 @@ import {
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { CookiesService } from './cookies.service';
+import { Public } from './decorators/public.decorator';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import type { PublicUser } from '../users/users.types';
@@ -19,6 +20,7 @@ interface AuthSessionResponse {
   user: PublicUser;
 }
 
+@Public()
 @Controller('auth')
 export class AuthController {
   constructor(

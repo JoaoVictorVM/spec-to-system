@@ -60,10 +60,18 @@ export class CookiesService {
   }
 
   readRefreshToken(req: Request): string | null {
+    return this.readCookie(req, REFRESH_TOKEN_COOKIE);
+  }
+
+  readAccessToken(req: Request): string | null {
+    return this.readCookie(req, ACCESS_TOKEN_COOKIE);
+  }
+
+  private readCookie(req: Request, name: string): string | null {
     const cookies = req.cookies as
       | Record<string, string | undefined>
       | undefined;
-    const value = cookies?.[REFRESH_TOKEN_COOKIE];
+    const value = cookies?.[name];
     return typeof value === 'string' && value.length > 0 ? value : null;
   }
 
