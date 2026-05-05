@@ -4,13 +4,13 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { CookiesService } from './cookies.service';
-import { HashingService } from './hashing.service';
+import { HashingModule } from './hashing.module';
 import { TokensService } from './tokens.service';
 
 @Module({
-  imports: [UsersModule, JwtModule.register({})],
+  imports: [UsersModule, JwtModule.register({}), HashingModule],
   controllers: [AuthController],
-  providers: [AuthService, HashingService, TokensService, CookiesService],
-  exports: [AuthService, HashingService, TokensService, CookiesService],
+  providers: [AuthService, TokensService, CookiesService],
+  exports: [AuthService, TokensService, CookiesService, HashingModule],
 })
 export class AuthModule {}
