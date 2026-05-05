@@ -18,6 +18,13 @@ export interface IssuedRefreshToken {
   expiresAt: Date;
 }
 
+export interface RotatedTokens {
+  userId: string;
+  email: string;
+  accessToken: string;
+  refresh: IssuedRefreshToken;
+}
+
 @Injectable()
 export class TokensService {
   constructor(
@@ -36,10 +43,9 @@ export class TokensService {
 
   async verifyAccessToken(token: string): Promise<AccessTokenPayload> {
     try {
-      const decoded = await this.jwt.verifyAsync<AccessTokenPayload>(token, {
+      return await this.jwt.verifyAsync<AccessTokenPayload>(token, {
         secret: this.auth.accessSecret,
       });
-      return decoded;
     } catch {
       throw new UnauthorizedException('Invalid or expired access token');
     }
@@ -55,6 +61,53 @@ export class TokensService {
     });
 
     return { plain, expiresAt };
+  }
+
+  async rotateRefreshToken(plain: string): Promise<RotatedTokens> {
+    const tokenHash = this.hashRefreshToken(plain);
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (
+      !stored ||
+      stored.revokedAt !== null ||
+      stored.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const newPlain = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
+    const newTokenHash = this.hashRefreshToken(newPlain);
+    const newExpiresAt = this.computeRefreshExpiry();
+
+    // Atomic: mark old token as revoked AND create new one. Prevents replay.
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.update({
+        where: { id: stored.id },
+        data: { revokedAt: new Date() },
+      }),
+      this.prisma.refreshToken.create({
+        data: {
+          userId: stored.userId,
+          tokenHash: newTokenHash,
+          expiresAt: newExpiresAt,
+        },
+      }),
+    ]);
+
+    const accessToken = await this.signAccessToken({
+      sub: stored.userId,
+      email: stored.user.email,
+    });
+
+    return {
+      userId: stored.userId,
+      email: stored.user.email,
+      accessToken,
+      refresh: { plain: newPlain, expiresAt: newExpiresAt },
+    };
   }
 
   hashRefreshToken(plain: string): string {

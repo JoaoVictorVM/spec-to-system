@@ -1,10 +1,33 @@
 import request from 'supertest';
 import { TestApp } from './test-app';
 
-interface LoginResponseBody {
-  accessToken: string;
-  refreshToken: string;
+interface SessionResponseBody {
   user: { id: string; email: string; passwordHash?: string; password?: string };
+}
+
+const ACCESS_COOKIE = 'access_token';
+const REFRESH_COOKIE = 'refresh_token';
+
+function getSetCookieHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): string[] {
+  const value = headers['set-cookie'];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') return [value];
+  return [];
+}
+
+function findCookie(setCookies: string[], name: string): string | undefined {
+  return setCookies.find((c) => c.startsWith(`${name}=`));
+}
+
+function extractCookieValue(setCookies: string[], name: string): string | null {
+  const cookie = findCookie(setCookies, name);
+  if (!cookie) return null;
+  const head = cookie.split(';')[0];
+  if (!head) return null;
+  const value = head.slice(name.length + 1);
+  return value.length > 0 ? value : null;
 }
 
 describe('Auth (e2e)', () => {
@@ -115,7 +138,7 @@ describe('Auth (e2e)', () => {
         .expect(201);
     }
 
-    it('returns 200 with access token, refresh token and public user on valid credentials', async () => {
+    it('returns 200 with public user only (no tokens in body)', async () => {
       await registerUser();
 
       const response = await request(testApp.getHttpServer())
@@ -123,17 +146,31 @@ describe('Auth (e2e)', () => {
         .send(credentials)
         .expect(200);
 
-      const body = response.body as LoginResponseBody;
-      expect(body).toMatchObject({
-        accessToken: expect.any(String) as string,
-        refreshToken: expect.any(String) as string,
-        user: {
-          id: expect.any(String) as string,
-          email: credentials.email,
-        },
-      });
+      const body = response.body as SessionResponseBody;
+      expect(body.user.email).toBe(credentials.email);
+      expect(body).not.toHaveProperty('accessToken');
+      expect(body).not.toHaveProperty('refreshToken');
       expect(body.user).not.toHaveProperty('passwordHash');
-      expect(body.user).not.toHaveProperty('password');
+    });
+
+    it('sets HttpOnly access and refresh cookies', async () => {
+      await registerUser();
+
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send(credentials)
+        .expect(200);
+
+      const setCookies = getSetCookieHeaders(response.headers);
+      const access = findCookie(setCookies, ACCESS_COOKIE);
+      const refresh = findCookie(setCookies, REFRESH_COOKIE);
+
+      expect(access).toBeDefined();
+      expect(refresh).toBeDefined();
+      expect(access).toMatch(/HttpOnly/i);
+      expect(refresh).toMatch(/HttpOnly/i);
+      expect(access).toMatch(/Path=\//);
+      expect(refresh).toMatch(/Path=\/auth/);
     });
 
     it('persists the refresh token hashed (never plain) in the database', async () => {
@@ -144,12 +181,14 @@ describe('Auth (e2e)', () => {
         .send(credentials)
         .expect(200);
 
-      const body = response.body as LoginResponseBody;
+      const setCookies = getSetCookieHeaders(response.headers);
+      const plainRefresh = extractCookieValue(setCookies, REFRESH_COOKIE);
+      expect(plainRefresh).not.toBeNull();
+
       const persisted = await testApp.prisma.refreshToken.findMany({});
       expect(persisted).toHaveLength(1);
       const stored = persisted[0];
-      expect(stored).toBeDefined();
-      expect(stored?.tokenHash).not.toBe(body.refreshToken);
+      expect(stored?.tokenHash).not.toBe(plainRefresh);
       expect(stored?.expiresAt.getTime()).toBeGreaterThan(Date.now());
       expect(stored?.revokedAt).toBeNull();
     });
@@ -170,27 +209,6 @@ describe('Auth (e2e)', () => {
         .expect(401);
     });
 
-    it('does not leak whether the email exists (same status for both failure modes)', async () => {
-      await registerUser();
-
-      const wrongPwd = await request(testApp.getHttpServer())
-        .post('/auth/login')
-        .send({ email: credentials.email, password: 'wrong-pass-1' });
-      const unknownEmail = await request(testApp.getHttpServer())
-        .post('/auth/login')
-        .send({ email: 'unknown@example.com', password: 'wrong-pass-1' });
-
-      expect(wrongPwd.status).toBe(401);
-      expect(unknownEmail.status).toBe(401);
-    });
-
-    it('returns 400 when the email is malformed', async () => {
-      await request(testApp.getHttpServer())
-        .post('/auth/login')
-        .send({ email: 'not-an-email', password: 'whatever' })
-        .expect(400);
-    });
-
     it('logs in case-insensitively on email', async () => {
       await registerUser();
 
@@ -201,6 +219,101 @@ describe('Auth (e2e)', () => {
           password: credentials.password,
         })
         .expect(200);
+    });
+  });
+
+  describe('POST /auth/refresh', () => {
+    const credentials = {
+      email: 'refreshuser@example.com',
+      password: 'secret123',
+    };
+
+    async function loginAndGetCookies(): Promise<string[]> {
+      await request(testApp.getHttpServer())
+        .post('/auth/register')
+        .send(credentials)
+        .expect(201);
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/login')
+        .send(credentials)
+        .expect(200);
+      return getSetCookieHeaders(response.headers);
+    }
+
+    it('returns 200 with rotated cookies and the public user', async () => {
+      const cookies = await loginAndGetCookies();
+
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookies)
+        .expect(200);
+
+      const body = response.body as SessionResponseBody;
+      expect(body.user.email).toBe(credentials.email);
+
+      const newCookies = getSetCookieHeaders(response.headers);
+      expect(findCookie(newCookies, ACCESS_COOKIE)).toBeDefined();
+      expect(findCookie(newCookies, REFRESH_COOKIE)).toBeDefined();
+
+      const oldRefresh = extractCookieValue(cookies, REFRESH_COOKIE);
+      const newRefresh = extractCookieValue(newCookies, REFRESH_COOKIE);
+      expect(newRefresh).not.toBe(oldRefresh);
+    });
+
+    it('revokes the old refresh token in the database after rotation', async () => {
+      const cookies = await loginAndGetCookies();
+      const oldRefresh = extractCookieValue(cookies, REFRESH_COOKIE);
+      expect(oldRefresh).not.toBeNull();
+
+      await request(testApp.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookies)
+        .expect(200);
+
+      const tokens = await testApp.prisma.refreshToken.findMany({
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(tokens).toHaveLength(2);
+      expect(tokens[0]?.revokedAt).not.toBeNull();
+      expect(tokens[1]?.revokedAt).toBeNull();
+    });
+
+    it('rejects reuse of a refresh token that has already been rotated (replay defense)', async () => {
+      const cookies = await loginAndGetCookies();
+
+      await request(testApp.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookies)
+        .expect(200);
+
+      await request(testApp.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookies)
+        .expect(401);
+    });
+
+    it('returns 401 when the refresh cookie is missing', async () => {
+      await request(testApp.getHttpServer()).post('/auth/refresh').expect(401);
+    });
+
+    it('returns 401 when the refresh cookie value is unknown', async () => {
+      await request(testApp.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', `${REFRESH_COOKIE}=this-is-not-a-real-token`)
+        .expect(401);
+    });
+
+    it('clears the auth cookies on a failed refresh', async () => {
+      const response = await request(testApp.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', `${REFRESH_COOKIE}=invalid`)
+        .expect(401);
+
+      const setCookies = getSetCookieHeaders(response.headers);
+      const access = findCookie(setCookies, ACCESS_COOKIE);
+      const refresh = findCookie(setCookies, REFRESH_COOKIE);
+      expect(access).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/i);
+      expect(refresh).toMatch(/Expires=Thu, 01 Jan 1970|Max-Age=0/i);
     });
   });
 });

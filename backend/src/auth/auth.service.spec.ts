@@ -8,10 +8,15 @@ import { UsersService } from '../users/users.service';
 
 describe('AuthService', () => {
   let service: AuthService;
-  let users: jest.Mocked<Pick<UsersService, 'create' | 'findByEmail'>>;
+  let users: jest.Mocked<
+    Pick<UsersService, 'create' | 'findByEmail' | 'findById'>
+  >;
   let hashing: jest.Mocked<Pick<HashingService, 'hash' | 'compare'>>;
   let tokens: jest.Mocked<
-    Pick<TokensService, 'signAccessToken' | 'issueRefreshToken'>
+    Pick<
+      TokensService,
+      'signAccessToken' | 'issueRefreshToken' | 'rotateRefreshToken'
+    >
   >;
 
   const persistedUser: User = {
@@ -26,6 +31,7 @@ describe('AuthService', () => {
     users = {
       create: jest.fn(),
       findByEmail: jest.fn(),
+      findById: jest.fn(),
     };
     hashing = {
       hash: jest.fn(),
@@ -34,6 +40,7 @@ describe('AuthService', () => {
     tokens = {
       signAccessToken: jest.fn(),
       issueRefreshToken: jest.fn(),
+      rotateRefreshToken: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -158,6 +165,46 @@ describe('AuthService', () => {
 
       expect(tokens.signAccessToken).not.toHaveBeenCalled();
       expect(tokens.issueRefreshToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('refresh', () => {
+    const rotated = {
+      userId: persistedUser.id,
+      email: persistedUser.email,
+      accessToken: 'new-access',
+      refresh: { plain: 'new-refresh', expiresAt: new Date() },
+    };
+
+    it('rotates the refresh token and returns new tokens with the public user', async () => {
+      tokens.rotateRefreshToken.mockResolvedValue(rotated);
+      users.findById.mockResolvedValue(persistedUser);
+
+      const result = await service.refresh('old-refresh');
+
+      expect(tokens.rotateRefreshToken).toHaveBeenCalledWith('old-refresh');
+      expect(result.accessToken).toBe('new-access');
+      expect(result.refreshToken).toBe('new-refresh');
+      expect(result.user).not.toHaveProperty('passwordHash');
+    });
+
+    it('throws UnauthorizedException when the user has been deleted', async () => {
+      tokens.rotateRefreshToken.mockResolvedValue(rotated);
+      users.findById.mockResolvedValue(null);
+
+      await expect(service.refresh('old-refresh')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+
+    it('propagates UnauthorizedException from token rotation', async () => {
+      tokens.rotateRefreshToken.mockRejectedValue(
+        new UnauthorizedException('Invalid or expired refresh token'),
+      );
+
+      await expect(service.refresh('bad-refresh')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
   });
 });

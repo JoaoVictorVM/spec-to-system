@@ -14,7 +14,10 @@ describe('TokensService', () => {
   };
   let refreshDelegate: {
     create: jest.Mock<Promise<unknown>, [RefreshCreateArgs]>;
+    findUnique: jest.Mock;
+    update: jest.Mock;
   };
+  let prismaMock: PrismaService;
 
   const fakeAuthConfig = {
     accessSecret: 'access-secret-value',
@@ -30,9 +33,14 @@ describe('TokensService', () => {
     };
     refreshDelegate = {
       create: jest.fn<Promise<unknown>, [RefreshCreateArgs]>(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     };
-    const prismaMock = {
+    prismaMock = {
       refreshToken: refreshDelegate,
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) =>
+        Promise.all(ops),
+      ),
     } as unknown as PrismaService;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -127,6 +135,68 @@ describe('TokensService', () => {
       const expectedMax = after + 7 * 24 * 60 * 60 * 1000;
       expect(issued.expiresAt.getTime()).toBeGreaterThanOrEqual(expectedMin);
       expect(issued.expiresAt.getTime()).toBeLessThanOrEqual(expectedMax);
+    });
+  });
+
+  describe('rotateRefreshToken', () => {
+    const validStored = {
+      id: 'rt-1',
+      userId: 'user-1',
+      tokenHash: 'sha256-of-old',
+      expiresAt: new Date(Date.now() + 86_400_000),
+      revokedAt: null as Date | null,
+      createdAt: new Date(),
+      user: { id: 'user-1', email: 'user@example.com' },
+    };
+
+    it('throws UnauthorizedException when the token is not found', async () => {
+      refreshDelegate.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.rotateRefreshToken('unknown-plain'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('throws UnauthorizedException when the token is revoked', async () => {
+      refreshDelegate.findUnique.mockResolvedValue({
+        ...validStored,
+        revokedAt: new Date(),
+      });
+
+      await expect(
+        service.rotateRefreshToken('revoked-plain'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('throws UnauthorizedException when the token is expired', async () => {
+      refreshDelegate.findUnique.mockResolvedValue({
+        ...validStored,
+        expiresAt: new Date(Date.now() - 1),
+      });
+
+      await expect(
+        service.rotateRefreshToken('expired-plain'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('revokes the old token and issues a new pair on success', async () => {
+      refreshDelegate.findUnique.mockResolvedValue(validStored);
+      refreshDelegate.update.mockResolvedValue({});
+      refreshDelegate.create.mockResolvedValue({});
+      jwt.signAsync.mockResolvedValue('new-access-jwt');
+
+      const result = await service.rotateRefreshToken('old-plain');
+
+      expect(result.userId).toBe('user-1');
+      expect(result.email).toBe('user@example.com');
+      expect(result.accessToken).toBe('new-access-jwt');
+      expect(result.refresh.plain.length).toBeGreaterThan(0);
+      expect(result.refresh.plain).not.toBe('old-plain');
+
+      // $transaction was used to revoke + create atomically
+      const txMock = (prismaMock as unknown as { $transaction: jest.Mock })
+        .$transaction;
+      expect(txMock).toHaveBeenCalledTimes(1);
     });
   });
 });

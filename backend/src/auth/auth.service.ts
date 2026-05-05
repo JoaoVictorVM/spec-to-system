@@ -11,7 +11,7 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-export interface LoginResult extends AuthTokens {
+export interface AuthResult extends AuthTokens {
   user: PublicUser;
 }
 
@@ -29,7 +29,7 @@ export class AuthService {
     return toPublicUser(user);
   }
 
-  async login(dto: LoginDto): Promise<LoginResult> {
+  async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.users.findByEmail(dto.email);
 
     // Always run bcrypt.compare even when the user does not exist, to mitigate
@@ -53,6 +53,22 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: refresh.plain,
+      user: toPublicUser(user),
+    };
+  }
+
+  async refresh(plainRefreshToken: string): Promise<AuthResult> {
+    const rotated = await this.tokens.rotateRefreshToken(plainRefreshToken);
+    const user = await this.users.findById(rotated.userId);
+
+    // The user could have been deleted between the rotation and lookup; treat as auth failure.
+    if (!user) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return {
+      accessToken: rotated.accessToken,
+      refreshToken: rotated.refresh.plain,
       user: toPublicUser(user),
     };
   }
