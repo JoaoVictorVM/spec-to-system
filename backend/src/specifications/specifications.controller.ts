@@ -1,0 +1,30 @@
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import type { Specification } from '@prisma/client';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/types/authenticated-request';
+import { CreateSpecificationDto } from './dto/create-specification.dto';
+import { SpecificationsService } from './specifications.service';
+
+const ONE_MINUTE_MS = 60_000;
+const POST_LIMIT_PER_MINUTE = 10;
+
+@Controller('specifications')
+export class SpecificationsController {
+  constructor(private readonly specifications: SpecificationsService) {}
+
+  @Throttle({ default: { limit: POST_LIMIT_PER_MINUTE, ttl: ONE_MINUTE_MS } })
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @CurrentUser() current: AuthenticatedUser,
+    @Body() dto: CreateSpecificationDto,
+  ): Promise<Specification> {
+    return this.specifications.create({
+      userId: current.id,
+      sessionCode: dto.sessionCode,
+      prompt: dto.prompt,
+      response: dto.response,
+    });
+  }
+}
