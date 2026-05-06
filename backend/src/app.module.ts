@@ -15,6 +15,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { SpecificationsModule } from './specifications/specifications.module';
 import { appConfig } from './config/app.config';
 import { authConfig } from './config/auth.config';
 import { cookieConfig } from './config/cookie.config';
@@ -50,6 +51,7 @@ const DEFAULT_REQUESTS_PER_MINUTE = 60;
     PrismaModule,
     UsersModule,
     AuthModule,
+    SpecificationsModule,
   ],
   controllers: [AppController],
   providers: [
