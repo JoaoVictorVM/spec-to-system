@@ -1,4 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import type { Specification } from '@prisma/client';
 import { SpecificationsController } from './specifications.controller';
 import { SpecificationsService } from './specifications.service';
@@ -6,7 +7,9 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 
 describe('SpecificationsController', () => {
   let controller: SpecificationsController;
-  let service: jest.Mocked<Pick<SpecificationsService, 'create'>>;
+  let service: jest.Mocked<
+    Pick<SpecificationsService, 'create' | 'findByCode'>
+  >;
 
   const currentUser: AuthenticatedUser = {
     id: 'user-1',
@@ -23,7 +26,7 @@ describe('SpecificationsController', () => {
   };
 
   beforeEach(async () => {
-    service = { create: jest.fn() };
+    service = { create: jest.fn(), findByCode: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SpecificationsController],
@@ -61,6 +64,25 @@ describe('SpecificationsController', () => {
       });
 
       expect(result).toEqual(persistedSpec);
+    });
+  });
+
+  describe('findByCode', () => {
+    it('returns the specification when found', async () => {
+      service.findByCode.mockResolvedValue(persistedSpec);
+
+      const result = await controller.findByCode('aB3_-x');
+
+      expect(service.findByCode).toHaveBeenCalledWith('aB3_-x');
+      expect(result).toEqual(persistedSpec);
+    });
+
+    it('throws NotFoundException when no specification matches', async () => {
+      service.findByCode.mockResolvedValue(null);
+
+      await expect(controller.findByCode('nope12')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 });

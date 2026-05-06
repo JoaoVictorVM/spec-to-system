@@ -162,4 +162,50 @@ describe('Specifications (e2e)', () => {
         .expect(400);
     });
   });
+
+  describe('GET /specifications/:code', () => {
+    it('returns 200 and the specification for any caller (public route)', async () => {
+      const cookies = await loginAndGetCookies();
+      await request(testApp.getHttpServer())
+        .post('/specifications')
+        .set('Cookie', cookies)
+        .send(validPayload)
+        .expect(201);
+
+      // Anonymous: no cookies sent
+      const response = await request(testApp.getHttpServer())
+        .get(`/specifications/${validPayload.sessionCode}`)
+        .expect(200);
+
+      const body = response.body as SpecBody;
+      expect(body.sessionCode).toBe(validPayload.sessionCode);
+      expect(body.prompt).toBe(validPayload.prompt);
+      expect(body.response).toBe(validPayload.response);
+    });
+
+    it('returns the specification when fetched by a different authenticated user', async () => {
+      const ownerCookies = await loginAndGetCookies();
+      await request(testApp.getHttpServer())
+        .post('/specifications')
+        .set('Cookie', ownerCookies)
+        .send(validPayload)
+        .expect(201);
+
+      const otherCookies = await loginAndGetCookies({
+        email: 'other@example.com',
+        password: 'secret123',
+      });
+
+      await request(testApp.getHttpServer())
+        .get(`/specifications/${validPayload.sessionCode}`)
+        .set('Cookie', otherCookies)
+        .expect(200);
+    });
+
+    it('returns 404 when the sessionCode does not exist', async () => {
+      await request(testApp.getHttpServer())
+        .get('/specifications/zzzzzz')
+        .expect(404);
+    });
+  });
 });

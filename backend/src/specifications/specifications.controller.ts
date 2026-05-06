@@ -1,7 +1,17 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Specification } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { CreateSpecificationDto } from './dto/create-specification.dto';
 import { SpecificationsService } from './specifications.service';
@@ -26,5 +36,19 @@ export class SpecificationsController {
       prompt: dto.prompt,
       response: dto.response,
     });
+  }
+
+  /**
+   * Public: anyone with the unguessable sessionCode (nanoid 6) can read a
+   * specification. Discoverability is bounded by the address space (~36^6).
+   */
+  @Public()
+  @Get(':code')
+  async findByCode(@Param('code') code: string): Promise<Specification> {
+    const spec = await this.specifications.findByCode(code);
+    if (!spec) {
+      throw new NotFoundException('Specification not found');
+    }
+    return spec;
   }
 }
