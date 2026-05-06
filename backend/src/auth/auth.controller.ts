@@ -8,6 +8,7 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { CookiesService } from './cookies.service';
@@ -15,6 +16,9 @@ import { Public } from './decorators/public.decorator';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import type { PublicUser } from '../users/users.types';
+
+const ONE_MINUTE_MS = 60_000;
+const STRICT_AUTH_LIMIT = 5;
 
 interface AuthSessionResponse {
   user: PublicUser;
@@ -28,12 +32,14 @@ export class AuthController {
     private readonly cookies: CookiesService,
   ) {}
 
+  @Throttle({ default: { limit: STRICT_AUTH_LIMIT, ttl: ONE_MINUTE_MS } })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   register(@Body() dto: RegisterDto): Promise<PublicUser> {
     return this.auth.register(dto);
   }
 
+  @Throttle({ default: { limit: STRICT_AUTH_LIMIT, ttl: ONE_MINUTE_MS } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(

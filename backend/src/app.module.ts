@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -17,6 +19,9 @@ import { appConfig } from './config/app.config';
 import { authConfig } from './config/auth.config';
 import { cookieConfig } from './config/cookie.config';
 import { envValidationSchema } from './config/env.validation';
+
+const ONE_MINUTE_MS = 60_000;
+const DEFAULT_REQUESTS_PER_MINUTE = 60;
 
 @Module({
   imports: [
@@ -29,6 +34,18 @@ import { envValidationSchema } from './config/env.validation';
       validationOptions: {
         abortEarly: false,
       },
+    }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'default',
+          ttl: ONE_MINUTE_MS,
+          limit: DEFAULT_REQUESTS_PER_MINUTE,
+        },
+      ],
+      // E2E tests fire many requests in tight loops against a single shared
+      // server; rate limiting them adds noise without security value.
+      skipIf: () => process.env['NODE_ENV'] === 'test',
     }),
     PrismaModule,
     UsersModule,
@@ -47,6 +64,11 @@ import { envValidationSchema } from './config/env.validation';
         stopAtFirstError: false,
       }),
     },
+    // Order matters: throttler runs before JWT to short-circuit floods cheaply.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
@@ -55,6 +77,6 @@ import { envValidationSchema } from './config/env.validation';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(cookieParser()).forRoutes('*');
+    consumer.apply(helmet(), cookieParser()).forRoutes('*');
   }
 }
