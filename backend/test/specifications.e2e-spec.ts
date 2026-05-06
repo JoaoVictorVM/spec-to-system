@@ -208,4 +208,137 @@ describe('Specifications (e2e)', () => {
         .expect(404);
     });
   });
+
+  describe('GET /specifications', () => {
+    interface ListBody {
+      items: SpecBody[];
+      nextCursor: string | null;
+    }
+
+    function makePayload(seed: string): {
+      sessionCode: string;
+      prompt: string;
+      response: string;
+    } {
+      return {
+        sessionCode: seed,
+        prompt: `prompt for ${seed}`,
+        response: `## Visão Geral\nseed=${seed}`,
+      };
+    }
+
+    async function postSpec(
+      cookies: string[],
+      payload: { sessionCode: string; prompt: string; response: string },
+    ): Promise<void> {
+      await request(testApp.getHttpServer())
+        .post('/specifications')
+        .set('Cookie', cookies)
+        .send(payload)
+        .expect(201);
+    }
+
+    it('returns 401 without access cookie', async () => {
+      await request(testApp.getHttpServer()).get('/specifications').expect(401);
+    });
+
+    it('returns only the authenticated user specifications, newest first', async () => {
+      const ownerCookies = await loginAndGetCookies();
+      await postSpec(ownerCookies, makePayload('aaaaaa'));
+      await postSpec(ownerCookies, makePayload('bbbbbb'));
+
+      const otherCookies = await loginAndGetCookies({
+        email: 'other@example.com',
+        password: 'secret123',
+      });
+      await postSpec(otherCookies, makePayload('cccccc'));
+
+      const response = await request(testApp.getHttpServer())
+        .get('/specifications')
+        .set('Cookie', ownerCookies)
+        .expect(200);
+
+      const body = response.body as ListBody;
+      expect(body.items).toHaveLength(2);
+      expect(body.items.map((s) => s.sessionCode)).toEqual([
+        'bbbbbb',
+        'aaaaaa',
+      ]);
+      expect(body.nextCursor).toBeNull();
+    });
+
+    it('paginates with limit + cursor and signals more pages via nextCursor', async () => {
+      const cookies = await loginAndGetCookies();
+      for (const seed of ['aaaaaa', 'bbbbbb', 'cccccc', 'dddddd', 'eeeeee']) {
+        await postSpec(cookies, makePayload(seed));
+      }
+
+      const firstPage = await request(testApp.getHttpServer())
+        .get('/specifications')
+        .query({ limit: 2 })
+        .set('Cookie', cookies)
+        .expect(200);
+
+      const firstBody = firstPage.body as ListBody;
+      expect(firstBody.items).toHaveLength(2);
+      expect(firstBody.items.map((s) => s.sessionCode)).toEqual([
+        'eeeeee',
+        'dddddd',
+      ]);
+      expect(firstBody.nextCursor).not.toBeNull();
+
+      const secondPage = await request(testApp.getHttpServer())
+        .get('/specifications')
+        .query({ limit: 2, cursor: firstBody.nextCursor })
+        .set('Cookie', cookies)
+        .expect(200);
+
+      const secondBody = secondPage.body as ListBody;
+      expect(secondBody.items.map((s) => s.sessionCode)).toEqual([
+        'cccccc',
+        'bbbbbb',
+      ]);
+      expect(secondBody.nextCursor).not.toBeNull();
+
+      const thirdPage = await request(testApp.getHttpServer())
+        .get('/specifications')
+        .query({ limit: 2, cursor: secondBody.nextCursor })
+        .set('Cookie', cookies)
+        .expect(200);
+
+      const thirdBody = thirdPage.body as ListBody;
+      expect(thirdBody.items.map((s) => s.sessionCode)).toEqual(['aaaaaa']);
+      expect(thirdBody.nextCursor).toBeNull();
+    });
+
+    it('returns an empty list when the user has no specifications', async () => {
+      const cookies = await loginAndGetCookies();
+      const response = await request(testApp.getHttpServer())
+        .get('/specifications')
+        .set('Cookie', cookies)
+        .expect(200);
+
+      const body = response.body as ListBody;
+      expect(body.items).toEqual([]);
+      expect(body.nextCursor).toBeNull();
+    });
+
+    it('returns 400 when limit is out of range', async () => {
+      const cookies = await loginAndGetCookies();
+      await request(testApp.getHttpServer())
+        .get('/specifications')
+        .query({ limit: 999 })
+        .set('Cookie', cookies)
+        .expect(400);
+    });
+
+    it('returns 400 when cursor is not a valid uuid', async () => {
+      const cookies = await loginAndGetCookies();
+      await request(testApp.getHttpServer())
+        .get('/specifications')
+        .query({ cursor: 'not-a-uuid' })
+        .set('Cookie', cookies)
+        .expect(400);
+    });
+  });
 });

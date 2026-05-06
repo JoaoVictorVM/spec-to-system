@@ -8,7 +8,7 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 describe('SpecificationsController', () => {
   let controller: SpecificationsController;
   let service: jest.Mocked<
-    Pick<SpecificationsService, 'create' | 'findByCode'>
+    Pick<SpecificationsService, 'create' | 'findByCode' | 'listForUser'>
   >;
 
   const currentUser: AuthenticatedUser = {
@@ -26,7 +26,11 @@ describe('SpecificationsController', () => {
   };
 
   beforeEach(async () => {
-    service = { create: jest.fn(), findByCode: jest.fn() };
+    service = {
+      create: jest.fn(),
+      findByCode: jest.fn(),
+      listForUser: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SpecificationsController],
@@ -82,6 +86,44 @@ describe('SpecificationsController', () => {
 
       await expect(controller.findByCode('nope12')).rejects.toBeInstanceOf(
         NotFoundException,
+      );
+    });
+  });
+
+  describe('listMine', () => {
+    it('forwards the current user id and the query params to the service', async () => {
+      service.listForUser.mockResolvedValue({ items: [], nextCursor: null });
+
+      await controller.listMine(currentUser, {
+        cursor: '11111111-1111-4111-8111-111111111111',
+        limit: 50,
+      });
+
+      expect(service.listForUser).toHaveBeenCalledWith({
+        userId: currentUser.id,
+        cursor: '11111111-1111-4111-8111-111111111111',
+        limit: 50,
+      });
+    });
+
+    it('passes undefined cursor and limit when not provided', async () => {
+      service.listForUser.mockResolvedValue({ items: [], nextCursor: null });
+
+      await controller.listMine(currentUser, {});
+
+      expect(service.listForUser).toHaveBeenCalledWith({
+        userId: currentUser.id,
+        cursor: undefined,
+        limit: undefined,
+      });
+    });
+
+    it('returns the paginated result from the service', async () => {
+      const expected = { items: [persistedSpec], nextCursor: 'next-id' };
+      service.listForUser.mockResolvedValue(expected);
+
+      await expect(controller.listMine(currentUser, {})).resolves.toEqual(
+        expected,
       );
     });
   });

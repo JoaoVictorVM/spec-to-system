@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Specification } from '@prisma/client';
@@ -14,7 +15,11 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { CreateSpecificationDto } from './dto/create-specification.dto';
-import { SpecificationsService } from './specifications.service';
+import { ListSpecificationsQueryDto } from './dto/list-specifications-query.dto';
+import {
+  SpecificationsService,
+  type ListSpecificationsResult,
+} from './specifications.service';
 
 const ONE_MINUTE_MS = 60_000;
 const POST_LIMIT_PER_MINUTE = 10;
@@ -22,6 +27,18 @@ const POST_LIMIT_PER_MINUTE = 10;
 @Controller('specifications')
 export class SpecificationsController {
   constructor(private readonly specifications: SpecificationsService) {}
+
+  @Get()
+  listMine(
+    @CurrentUser() current: AuthenticatedUser,
+    @Query() query: ListSpecificationsQueryDto,
+  ): Promise<ListSpecificationsResult> {
+    return this.specifications.listForUser({
+      userId: current.id,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
 
   @Throttle({ default: { limit: POST_LIMIT_PER_MINUTE, ttl: ONE_MINUTE_MS } })
   @Post()
