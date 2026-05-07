@@ -17,6 +17,7 @@ describe('App', () => {
 
   it('mounts the router and renders the landing page at /', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { level: 1, name: /landing/i })).toBeInTheDocument()
+    // Landing page hero: headline split across two gradient spans.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/da ideia ao stack/i)
   })
 })

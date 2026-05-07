@@ -19,7 +19,7 @@ function renderAt(path: string) {
 describe('AppRoutes', () => {
   it('renders LandingPage at /', () => {
     renderAt('/')
-    expect(screen.getByRole('heading', { level: 1, name: /landing/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/da ideia ao stack/i)
   })
 
   it('renders DefinitionPage at /definition', () => {
