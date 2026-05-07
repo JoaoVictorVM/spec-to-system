@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, type ReactNode } from 'react'
-import { ApiError, authApi, usersApi, type PublicUser } from '../api'
+import { ApiError, authApi, onSessionExpired, usersApi, type PublicUser } from '../api'
 import { AuthContext, type AuthContextValue } from './AuthContext'
 import { authReducer, initialAuthState } from './state'
 
@@ -35,6 +35,14 @@ function AuthProvider({ children }: AuthProviderProps) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // The API client emits this event when an auto-refresh attempt fails — the
+  // user's session has expired mid-flight and we should reflect that in state.
+  useEffect(() => {
+    return onSessionExpired(() => {
+      dispatch({ type: 'SESSION_EXPIRED' })
+    })
   }, [])
 
   const login = useCallback(async (email: string, password: string): Promise<PublicUser> => {

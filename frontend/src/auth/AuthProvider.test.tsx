@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type AuthSession, type PublicUser } from '../api'
 import { authApi } from '../api/auth'
+import * as clientModule from '../api/client'
 import { usersApi } from '../api/users'
 import AuthProvider from './AuthProvider'
 import { useAuth } from './useAuth'
@@ -235,5 +236,46 @@ describe('AuthProvider', () => {
     // Register should NOT have set authenticated state by itself (the user
     // logs in separately).
     expect(screen.getByTestId('status')).toHaveTextContent('unauthenticated')
+  })
+
+  it('dispatches SESSION_EXPIRED when the API client signals an expired session', async () => {
+    let capturedListener: (() => void) | undefined
+    vi.spyOn(clientModule, 'onSessionExpired').mockImplementation((listener) => {
+      capturedListener = listener
+      return () => undefined
+    })
+
+    render(
+      <AuthProvider>
+        <StatusProbe />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent(`authenticated:${persistedUser.email}`)
+    })
+
+    expect(capturedListener).toBeDefined()
+    act(() => {
+      capturedListener?.()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent('unauthenticated')
+    })
+  })
+
+  it('unsubscribes from session-expired on unmount', () => {
+    const unsubscribe = vi.fn()
+    vi.spyOn(clientModule, 'onSessionExpired').mockReturnValue(unsubscribe)
+
+    const { unmount } = render(
+      <AuthProvider>
+        <p>child</p>
+      </AuthProvider>,
+    )
+
+    unmount()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
 })

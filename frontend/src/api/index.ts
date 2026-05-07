@@ -1,4 +1,4 @@
-export { ApiError, apiFetch } from './client'
+export { ApiError, apiFetch, onSessionExpired } from './client'
 export type { ApiRequestInit } from './client'
 export { authApi } from './auth'
 export { usersApi } from './users'
