@@ -1,20 +1,15 @@
-import { Link } from 'react-router-dom'
-import { ROUTE_PATHS } from '../../routes/paths'
+import { useAuth } from '../../auth'
+import GuestActions from './GuestActions'
+import UserMenu from './UserMenu'
 
-/**
- * Placeholder for now — Phase 4 checkpoint 5 will swap this for an
- * AuthContext-aware variant that shows the user email + logout when
- * authenticated.
- */
 function HeaderActions() {
+  const { state } = useAuth()
+
   return (
     <nav aria-label="Account">
-      <Link
-        to={ROUTE_PATHS.login}
-        className="text-sm text-text-secondary transition-colors duration-fast hover:text-text-primary"
-      >
-        Entrar
-      </Link>
+      {state.status === 'loading' && <span className="sr-only">Loading session</span>}
+      {state.status === 'unauthenticated' && <GuestActions />}
+      {state.status === 'authenticated' && <UserMenu email={state.user.email} />}
     </nav>
   )
 }

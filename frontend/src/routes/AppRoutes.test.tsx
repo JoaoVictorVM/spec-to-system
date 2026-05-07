@@ -1,13 +1,17 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
+import { AuthContextHarness } from '../auth/testing/AuthContextHarness'
+import { makeAuthContextValue } from '../auth/testing/makeAuthContextValue'
 import AppRoutes from './AppRoutes'
 import { buildVerdictPath } from './paths'
 
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <AppRoutes />
+      <AuthContextHarness value={makeAuthContextValue({ status: 'unauthenticated' })}>
+        <AppRoutes />
+      </AuthContextHarness>
     </MemoryRouter>,
   )
 }
