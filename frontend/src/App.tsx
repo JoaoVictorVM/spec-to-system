@@ -1,4 +1,5 @@
 import { BrowserRouter } from 'react-router-dom'
+import { AiSessionProvider } from './ai'
 import { AuthProvider } from './auth'
 import AppRoutes from './routes/AppRoutes'
 
@@ -6,7 +7,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <AiSessionProvider>
+          <AppRoutes />
+        </AiSessionProvider>
       </AuthProvider>
     </BrowserRouter>
   )
