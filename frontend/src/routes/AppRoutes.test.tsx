@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import AiSessionProvider from '../ai/AiSessionProvider'
+import { specificationsApi } from '../api/specifications'
 import { AuthContextHarness } from '../auth/testing/AuthContextHarness'
 import { makeAuthContextValue } from '../auth/testing/makeAuthContextValue'
 import AppRoutes from './AppRoutes'
@@ -10,13 +12,22 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <AuthContextHarness value={makeAuthContextValue({ status: 'unauthenticated' })}>
-        <AppRoutes />
+        <AiSessionProvider>
+          <AppRoutes />
+        </AiSessionProvider>
       </AuthContextHarness>
     </MemoryRouter>,
   )
 }
 
 describe('AppRoutes', () => {
+  beforeEach(() => {
+    vi.spyOn(specificationsApi, 'list').mockResolvedValue({ items: [], nextCursor: null })
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('renders LandingPage at /', () => {
     renderAt('/')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/da ideia ao stack/i)
@@ -24,7 +35,9 @@ describe('AppRoutes', () => {
 
   it('renders DefinitionPage at /definition', () => {
     renderAt('/definition')
-    expect(screen.getByRole('heading', { level: 1, name: /definition/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: /nova especificação/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders VerdictPage at /verdict/:sessionCode and exposes the param', () => {
