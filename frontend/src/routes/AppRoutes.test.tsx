@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AiSessionProvider from '../ai/AiSessionProvider'
+import { ApiError } from '../api'
 import { specificationsApi } from '../api/specifications'
 import { AuthContextHarness } from '../auth/testing/AuthContextHarness'
 import { makeAuthContextValue } from '../auth/testing/makeAuthContextValue'
@@ -23,6 +24,9 @@ function renderAt(path: string) {
 describe('AppRoutes', () => {
   beforeEach(() => {
     vi.spyOn(specificationsApi, 'list').mockResolvedValue({ items: [], nextCursor: null })
+    vi.spyOn(specificationsApi, 'findByCode').mockRejectedValue(
+      new ApiError(404, 'Not Found', null),
+    )
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -40,12 +44,10 @@ describe('AppRoutes', () => {
     ).toBeInTheDocument()
   })
 
-  it('redirects to /definition when /verdict/:sessionCode is opened without state', () => {
+  it('renders the 404 view when /verdict/:sessionCode is opened without state and the spec does not exist', async () => {
     renderAt(buildVerdictPath('abc123'))
-    // Without state.prompt + AiSession credentials, the page bounces back.
-    expect(
-      screen.getByRole('heading', { level: 1, name: /nova especificação/i }),
-    ).toBeInTheDocument()
+    // Without state.prompt, the page falls back to the public fetch which 404s.
+    await screen.findByRole('heading', { level: 1, name: /especificação não encontrada/i })
   })
 
   it('renders LoginPage at /login', () => {
