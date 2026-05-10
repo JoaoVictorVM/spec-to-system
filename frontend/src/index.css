@@ -290,6 +290,152 @@ body {
   opacity: 0.4;
 }
 
+/* ----- Streaming cursor (blinking caret) ----- */
+@keyframes cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+.cursor-blink {
+  display: inline-block;
+  margin-left: var(--spacing-1);
+  color: var(--color-accent);
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* ----- Markdown body styling (scoped via .markdown) ----- */
+.markdown {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+}
+.markdown > * + * {
+  margin-top: var(--spacing-5);
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-tracked);
+  line-height: var(--line-height-tight);
+}
+.markdown > h1 + *,
+.markdown > h2 + *,
+.markdown > h3 + *,
+.markdown > h4 + * {
+  margin-top: var(--spacing-3);
+}
+.markdown h1 {
+  font-size: var(--font-size-3xl);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--spacing-2);
+  margin-top: var(--spacing-10);
+}
+.markdown h2 {
+  font-size: var(--font-size-2xl);
+  margin-top: var(--spacing-9);
+}
+.markdown h3 {
+  font-size: var(--font-size-xl);
+  margin-top: var(--spacing-7);
+}
+.markdown h4 {
+  font-size: var(--font-size-lg);
+  margin-top: var(--spacing-6);
+}
+.markdown p {
+  color: var(--color-text-secondary);
+}
+.markdown strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+.markdown em {
+  font-style: italic;
+}
+.markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown a:hover {
+  color: var(--color-accent-hover);
+}
+.markdown ul,
+.markdown ol {
+  padding-left: var(--spacing-7);
+  color: var(--color-text-secondary);
+}
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
+}
+.markdown li + li {
+  margin-top: var(--spacing-2);
+}
+.markdown li > p {
+  margin: 0;
+}
+.markdown blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding-left: var(--spacing-4);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.markdown code {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: 2px var(--spacing-2);
+}
+.markdown pre {
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-4);
+  overflow-x: auto;
+}
+.markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: var(--spacing-9) 0;
+}
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-2) var(--spacing-3);
+  text-align: left;
+}
+.markdown th {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+.markdown td {
+  color: var(--color-text-secondary);
+}
+
 /* Reduced-motion: skip the animation entirely */
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] {
@@ -300,5 +446,9 @@ body {
 
   .orb {
     animation: none !important;
+  }
+
+  .cursor-blink {
+    animation: none;
   }
 }
