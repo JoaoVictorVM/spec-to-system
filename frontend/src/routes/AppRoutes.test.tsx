@@ -40,10 +40,12 @@ describe('AppRoutes', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders VerdictPage at /verdict/:sessionCode and exposes the param', () => {
+  it('redirects to /definition when /verdict/:sessionCode is opened without state', () => {
     renderAt(buildVerdictPath('abc123'))
-    expect(screen.getByRole('heading', { level: 1, name: /verdict/i })).toBeInTheDocument()
-    expect(screen.getByText('abc123')).toBeInTheDocument()
+    // Without state.prompt + AiSession credentials, the page bounces back.
+    expect(
+      screen.getByRole('heading', { level: 1, name: /nova especificação/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders LoginPage at /login', () => {
