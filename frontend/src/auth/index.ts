@@ -1,4 +1,5 @@
 export { default as AuthProvider } from './AuthProvider'
 export { useAuth } from './useAuth'
+export { authErrorMessage } from './authErrorMessage'
 export type { AuthState } from './state'
 export type { AuthContextValue } from './AuthContext'

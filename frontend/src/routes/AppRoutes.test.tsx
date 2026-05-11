@@ -52,11 +52,11 @@ describe('AppRoutes', () => {
 
   it('renders LoginPage at /login', () => {
     renderAt('/login')
-    expect(screen.getByRole('heading', { level: 1, name: /login/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /entrar/i })).toBeInTheDocument()
   })
 
   it('renders RegisterPage at /register', () => {
     renderAt('/register')
-    expect(screen.getByRole('heading', { level: 1, name: /register/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /cadastrar/i })).toBeInTheDocument()
   })
 })
